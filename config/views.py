@@ -11,7 +11,13 @@ from .serializers import CertificateSerializer, CertificateFieldSerializer
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 from django.http import HttpResponse
+from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 
+# Add these renderers to your views
+class CustomRenderer(JSONRenderer):
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        # Customize the rendering if needed
+        return super().render(data, accepted_media_type, renderer_context)
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
@@ -174,6 +180,7 @@ def user_templates(request, user):
                     'verified': cert.verified,
                     'organization': cert.organization,
                     'created_at': cert.created_at,
+                    'csv_data': cert.csv_data.url,
                     'fields': []
                 }
                 
@@ -189,6 +196,10 @@ def user_templates(request, user):
                     })
                 
                 templates_data.append(template_data)
+            
+            # Explicitly set the renderer
+            renderer = CustomRenderer()
+            rendered_content = renderer.render(templates_data)
             
             return Response(templates_data)
         except Exception as e:
