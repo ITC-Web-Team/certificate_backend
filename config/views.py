@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, renderer_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
@@ -103,6 +103,8 @@ def user_certificate_list(request, user):
         )
     
     
+@api_view(['GET'])
+@renderer_classes([JSONRenderer, BrowsableAPIRenderer])
 def certificate_list(request):
     if request.method == 'GET':
         certificates = Certificate.objects.filter(verified=True)
@@ -277,6 +279,7 @@ def certificate_info(request, pk):
 
 
 @api_view(['GET'])
+@renderer_classes([JSONRenderer, BrowsableAPIRenderer])
 def generate_certificate(request, pk, roll_no, mode='preview'):
     try:
         certificate = Certificate.objects.get(id=pk)
@@ -359,7 +362,7 @@ def generate_certificate(request, pk, roll_no, mode='preview'):
     except Exception as e:
         print("Error generating certificate:", str(e))
         return Response(
-            {"error": "Failed to generate certificate"}, 
+            {"error": "Failed to generate certificate"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
