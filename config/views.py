@@ -297,60 +297,53 @@ def generate_certificate(request, pk, roll_no, mode='preview'):
             
         row = filtered_df.iloc[0].to_dict()
         
-        # Open the template image using a temporary file
+        # Open the template image using minio storage
         with certificate.template.open('rb') as template_file:
             img = Image.open(template_file)
-            
-            # Create a drawing context
             draw = ImageDraw.Draw(img)
             
             # Add text for each field
             for field in fields:
                 csv_value = str(row.get(field.csv_column, ''))
                 try:
-                    # Scale font size based on DPI
-                    scaled_font_size = int(field.font_size)
-                    font = ImageFont.truetype(f"fonts/{field.font_family}.ttf", scaled_font_size)
-                except:
-                    # Fallback to default font with scaled size
-                    default_font = ImageFont.load_default()
-                    # Create a larger font for better quality
-                    font = ImageFont.truetype("DejaVuSans.ttf", scaled_font_size)
-                
-                # Calculate text size for centering
-                bbox = draw.textbbox((0, 0), csv_value, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_height = bbox[3] - bbox[1]
-                
-                # Draw text with proper positioning
-                draw.text(
-                    (field.x, field.y),
-                    csv_value,
-                    font=font,
-                    fill=field.font_color,
-                    anchor="mm",  # Center align text at position
-                )
+                    # Load font - use absolute path or default font
+                    try:
+                        font = ImageFont.truetype(f"fonts/{field.font_family}.ttf", field.font_size)
+                    except:
+                        font = ImageFont.load_default()
+                    
+                    # Draw text
+                    draw.text(
+                        (field.x, field.y),
+                        csv_value,
+                        font=font,
+                        fill=field.font_color,
+                        anchor="mm"
+                    )
+                except Exception as e:
+                    print(f"Error drawing text: {e}")
+                    continue
             
-            # Save the image to bytes
+            # Save to BytesIO
             img_byte_array = io.BytesIO()
             
             if mode == 'pdf':
-                # Save as PDF with high DPI
                 img = img.convert('RGB')
                 img.save(img_byte_array, format='PDF', resolution=300.0)
                 content_type = 'application/pdf'
                 filename = f'certificate_{pk}_{roll_no}.pdf'
             else:
-                # Save as PNG with DPI information
-                img.save(img_byte_array, format='PNG', dpi=(300, 300))
+                img.save(img_byte_array, format='PNG', quality=95)
                 content_type = 'image/png'
                 filename = f'certificate_{pk}_{roll_no}.png'
             
             img_byte_array.seek(0)
             
-            response = HttpResponse(img_byte_array, content_type=content_type)
-            if mode != 'preview':
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            # Create response with proper headers
+            response = HttpResponse(img_byte_array.getvalue(), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Cache-Control'] = 'no-cache'
             
             return response
             
@@ -362,7 +355,7 @@ def generate_certificate(request, pk, roll_no, mode='preview'):
     except Exception as e:
         print("Error generating certificate:", str(e))
         return Response(
-            {"error": "Failed to generate certificate"},
+            {"error": "Failed to generate certificate"}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
