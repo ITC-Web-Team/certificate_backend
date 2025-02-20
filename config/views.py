@@ -300,40 +300,80 @@ def generate_certificate(request, pk, roll_no, mode='preview'):
         # Open the template image using minio storage
         with certificate.template.open('rb') as template_file:
             img = Image.open(template_file)
+            
+            # Get image DPI and calculate scaling factor
+            dpi = img.info.get('dpi', (300, 300))  # Default to 300 DPI if not specified
+            base_dpi = 300  # Base DPI for font sizing
+            scale_factor = base_dpi / dpi[0]
+            
             draw = ImageDraw.Draw(img)
             
             # Add text for each field
             for field in fields:
                 csv_value = str(row.get(field.csv_column, ''))
                 try:
-                    # Load font - use absolute path or default font
-                    try:
-                        font = ImageFont.truetype(f"fonts/{field.font_family}.ttf", field.font_size)
-                    except:
-                        font = ImageFont.load_default()
+                    # Scale font size based on DPI and image size
+                    img_width, img_height = img.size
+                    size_factor = min(img_width, img_height) / 1000  # Normalize to 1000px
+                    scaled_font_size = int(field.font_size * size_factor * scale_factor)
                     
-                    # Draw text
+                    try:
+                        # Try to load custom font
+                        font = ImageFont.truetype(
+                            f"fonts/{field.font_family}.ttf", 
+                            size=scaled_font_size
+                        )
+                    except Exception as font_error:
+                        print(f"Font error: {font_error}")
+                        # Fallback to default font
+                        font = ImageFont.load_default()
+                        # Scale default font
+                        font = ImageFont.truetype(
+                            "DejaVuSans.ttf", 
+                            size=scaled_font_size
+                        )
+                    
+                    # Get text size for centering
+                    bbox = draw.textbbox((0, 0), csv_value, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    # Calculate position with scaling
+                    x = int(field.x * (img_width / 1000))  # Scale x position
+                    y = int(field.y * (img_height / 1000))  # Scale y position
+                    
+                    # Draw text with proper positioning
                     draw.text(
-                        (field.x, field.y),
+                        (x, y),
                         csv_value,
                         font=font,
                         fill=field.font_color,
-                        anchor="mm"
+                        anchor="mm",  # Center align text
                     )
                 except Exception as e:
                     print(f"Error drawing text: {e}")
                     continue
             
-            # Save to BytesIO
+            # Save to BytesIO with high quality
             img_byte_array = io.BytesIO()
             
             if mode == 'pdf':
                 img = img.convert('RGB')
-                img.save(img_byte_array, format='PDF', resolution=300.0)
+                img.save(
+                    img_byte_array, 
+                    format='PDF', 
+                    resolution=300.0,
+                    quality=95
+                )
                 content_type = 'application/pdf'
                 filename = f'certificate_{pk}_{roll_no}.pdf'
             else:
-                img.save(img_byte_array, format='PNG', quality=95)
+                img.save(
+                    img_byte_array, 
+                    format='PNG', 
+                    dpi=(300, 300),
+                    quality=95
+                )
                 content_type = 'image/png'
                 filename = f'certificate_{pk}_{roll_no}.png'
             
