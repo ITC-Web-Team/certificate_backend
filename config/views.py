@@ -297,103 +297,67 @@ def generate_certificate(request, pk, roll_no, mode='preview'):
             
         row = filtered_df.iloc[0].to_dict()
         
-        # Open the template image using minio storage
+        # Open the template image
         with certificate.template.open('rb') as template_file:
             img = Image.open(template_file)
-            
-            # Get image DPI and calculate scaling factor
-            dpi = img.info.get('dpi', (300, 300))  # Default to 300 DPI if not specified
-            base_dpi = 300  # Base DPI for font sizing
-            scale_factor = base_dpi / dpi[0]
-            
             draw = ImageDraw.Draw(img)
+            
+            # Get image dimensions
+            img_width, img_height = img.size
             
             # Add text for each field
             for field in fields:
-                csv_value = str(row.get(field.csv_column, ''))
                 try:
-                    # Scale font size based on DPI and image size
-                    img_width, img_height = img.size
-                    size_factor = min(img_width, img_height) / 1000  # Normalize to 1000px
-                    scaled_font_size = int(field.font_size * size_factor * scale_factor)
+                    csv_value = str(row.get(field.csv_column, ''))
                     
+                    # Create font with specified size
                     try:
-                        # Try to load custom font
+                        # Try to use TrueType font with specified size
                         font = ImageFont.truetype(
-                            f"fonts/{field.font_family}.ttf", 
-                            size=scaled_font_size
+                            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                            size=field.font_size
                         )
-                    except Exception as font_error:
-                        print(f"Font error: {font_error}")
-                        # Fallback to default font
+                    except:
+                        # If TrueType fails, create basic font with size
                         font = ImageFont.load_default()
-                        # Scale default font
-                        font = ImageFont.truetype(
-                            "DejaVuSans.ttf", 
-                            size=scaled_font_size
-                        )
+                        # Scale up the default font
+                        font_size = field.font_size
+                        if font_size > 20:  # Default font is small, scale it up
+                            font = ImageFont.truetype(
+                                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                size=font_size
+                            )
                     
-                    # Get text size for centering
-                    bbox = draw.textbbox((0, 0), csv_value, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    text_height = bbox[3] - bbox[1]
+                    # Simple positioning - use the coordinates directly
+                    x = field.x
+                    y = field.y
                     
-                    # Calculate position with scaling
-                    x = int(field.x * (img_width / 1000))  # Scale x position
-                    y = int(field.y * (img_height / 1000))  # Scale y position
-                    
-                    # Draw text with proper positioning
+                    # Draw text
                     draw.text(
                         (x, y),
                         csv_value,
                         font=font,
-                        fill=field.font_color,
-                        anchor="mm",  # Center align text
+                        fill=field.font_color or 'black',
                     )
+                    
+                    print(f"Added text: {csv_value} at position ({x}, {y}) with size {field.font_size}")
+                    
                 except Exception as e:
-                    print(f"Error drawing text: {e}")
+                    print(f"Error adding text for field {field.field_name}: {str(e)}")
                     continue
             
-            # Save to BytesIO with high quality
+            # Save the image
             img_byte_array = io.BytesIO()
-            
-            if mode == 'pdf':
-                img = img.convert('RGB')
-                img.save(
-                    img_byte_array, 
-                    format='PDF', 
-                    resolution=300.0,
-                    quality=95
-                )
-                content_type = 'application/pdf'
-                filename = f'certificate_{pk}_{roll_no}.pdf'
-            else:
-                img.save(
-                    img_byte_array, 
-                    format='PNG', 
-                    dpi=(300, 300),
-                    quality=95
-                )
-                content_type = 'image/png'
-                filename = f'certificate_{pk}_{roll_no}.png'
-            
+            img.save(img_byte_array, format='PNG')
             img_byte_array.seek(0)
             
-            # Create response with proper headers
-            response = HttpResponse(img_byte_array.getvalue(), content_type=content_type)
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
-            response['Access-Control-Allow-Origin'] = '*'
-            response['Cache-Control'] = 'no-cache'
-            
+            # Return the response
+            response = HttpResponse(img_byte_array.getvalue(), content_type='image/png')
+            response['Content-Disposition'] = f'inline; filename="certificate_{pk}_{roll_no}.png"'
             return response
             
-    except Certificate.DoesNotExist:
-        return Response(
-            {"error": "Certificate not found"}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
     except Exception as e:
-        print("Error generating certificate:", str(e))
+        print(f"Certificate generation error: {str(e)}")
         return Response(
             {"error": "Failed to generate certificate"}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

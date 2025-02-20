@@ -101,8 +101,23 @@ SECURE_SSL_REDIRECT = False  # Explicitly disable SSL redirect
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 
+# Static files configuration
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static')
+]
+
 # WhiteNoise configuration
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_ROOT = os.path.join(BASE_DIR, 'static')
+
+# Create static directory if it doesn't exist
+if not os.path.exists(STATIC_ROOT):
+    os.makedirs(STATIC_ROOT)
+
+if not os.path.exists(WHITENOISE_ROOT):
+    os.makedirs(WHITENOISE_ROOT)
 
 # Database configuration for production
 if not DEBUG:
