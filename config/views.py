@@ -105,7 +105,7 @@ def user_certificate_list(request, user):
     
 def certificate_list(request):
     if request.method == 'GET':
-        certificates = Certificate.objects.all()
+        certificates = Certificate.objects.filter(verified=True)
         serializer = CertificateSerializer(certificates, many=True)
         return Response(serializer.data)
     
